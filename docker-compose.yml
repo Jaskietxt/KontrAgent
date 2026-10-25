@@ -1,0 +1,29 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      REPORT_TIMEOUT_SECONDS: "1800"
+      RUSPROFILE_COOKIES: /run/secrets/rusprofile_cookies.json
+      AI_CONFIG: /run/secrets/ai_config.json
+    volumes:
+      - type: bind
+        source: ./rusprofile_cookies.json
+        target: /run/secrets/rusprofile_cookies.json
+        read_only: true
+      - type: bind
+        source: ./ai_config.json
+        target: /run/secrets/ai_config.json
+        read_only: true
+    ports:
+      - "127.0.0.1:8000:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
