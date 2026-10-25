@@ -1,14 +1,14 @@
 # KontrAgent
 
-Веб-интерфейс для генератора PDF-досье из `dossier_report.py`: поиск, сохранённые проверки, факторы риска, полнота данных и выгрузка PDF. Сайт не открыт всему интернету: веб-порт контейнера привязан только к `127.0.0.1`, а удалённый доступ настраивается через Tailscale Serve. Для входа дополнительно требуется пароль приложения.
+Веб-интерфейс для генератора PDF-досье из `dossier_report.py`: поиск, сохранённые проверки, факторы риска, полнота данных и выгрузка PDF. Приложение требует пароль. Публичный HTTPS-доступ включается отдельным профилем Docker Compose с Caddy; сам веб-порт остаётся привязан к `127.0.0.1`. Все вошедшие пользователи видят общую историю сохранённых проверок.
 
 ## Что нужно
 
-- Linux-сервер с Docker Compose. Бесплатный ориентир — [Oracle Cloud Free Tier VM](https://www.oracle.com/cloud/free/); доступность бесплатных ресурсов зависит от региона и наличия мощностей. Oracle может запросить платёжную карту при регистрации, а неактивный аккаунт может быть приостановлен. Используйте только ресурсы с пометкой Always Free и проверяйте условия Oracle.
-- Tailscale на сервере и устройствах, с которых вы будете заходить. На [странице тарифов Tailscale](https://tailscale.com/pricing) сейчас указан бесплатный Personal для 6 пользователей; условия могут измениться.
+- Для публичного сайта: Linux-сервер/VM с Docker Compose и публичным IP. Бесплатный ориентир — [Oracle Cloud Free Tier VM](https://www.oracle.com/cloud/free/); доступность бесплатных ресурсов зависит от региона и наличия мощностей. Oracle может запросить платёжную карту при регистрации, а неактивный аккаунт может быть приостановлен. Используйте только ресурсы с пометкой Always Free и проверяйте условия Oracle.
+- Для публичного сайта: собственный домен с DNS-записью на сервер. Caddy автоматически получает TLS-сертификат; для этого сервер должен быть доступен по TCP-портам 80 и 443.
 - Локальные файлы `rusprofile_cookies.json` и `ai_config.json`. Они содержат секреты и не включаются в Git или Docker-образ.
 
-Сайт должен оставаться запущенным на VM. Oracle Free Tier не является гарантией доступности или SLA.
+Сайт доступен из интернета, но требует пароль приложения. VM должна оставаться запущенной; Oracle Free Tier не является гарантией доступности или SLA.
 
 ## Быстрый локальный запуск на Windows
 
@@ -41,52 +41,58 @@
 
 При `docker compose down` история сохраняется в именованном Docker volume. Удалять её можно командой `docker compose down -v` — это безвозвратно удалит сохранённые отчёты.
 
-## Подготовка сервера
+## Публичное размещение с HTTPS и паролем
 
-1. Создайте Linux VM в Oracle Cloud и установите Docker Engine и Docker Compose Plugin по [официальной инструкции Docker для Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
-2. Получите исходный код на VM. Не переносите секреты через Git. Передайте файлы `rusprofile_cookies.json` и `ai_config.json` на сервер отдельным защищённым способом и ограничьте права доступа:
+1. Создайте Linux VM (например, в Oracle Cloud) и установите Docker Engine и Docker Compose Plugin по [официальной инструкции Docker для Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+2. Создайте DNS-запись типа `A` для поддомена (например, `dossier.example.com`) с публичным IPv4-адресом VM. Если у VM нет настроенного IPv6, не добавляйте запись `AAAA`.
+3. В правилах облачного и системного firewall разрешите входящие TCP-порты `80` и `443` (UDP `443` необязателен, нужен только для HTTP/3). По возможности ограничьте SSH своим IP. Не открывайте порт `8000`: он привязан только к loopback.
+4. Получите исходный код на VM. Не переносите секреты через Git. Передайте файлы `rusprofile_cookies.json` и `ai_config.json` на сервер отдельным защищённым способом и ограничьте права доступа:
 
    ```sh
    chmod 600 rusprofile_cookies.json ai_config.json
    ```
 
-3. Создайте `.env` рядом с `docker-compose.yml`, сгенерировав отдельный длинный пароль:
+   Перед публичным запуском обязательно отзовите старые cookies Rusprofile и перевыпустите активный API-ключ AI: эти секреты раньше находились в истории Git, и простое удаление файлов не отзывает их.
+
+5. Создайте `.env` рядом с `docker-compose.yml`. Укажите домен и сгенерируйте отдельный длинный пароль:
 
    ```sh
+   DOMAIN="dossier.example.com"
    APP_PASSWORD="$(openssl rand -hex 32)"
-   printf 'APP_PASSWORD=%s\nSESSION_COOKIE_SECURE=true\n' "$APP_PASSWORD" > .env
+   printf 'DOMAIN=%s\nAPP_PASSWORD=%s\nSESSION_COOKIE_SECURE=true\n' "$DOMAIN" "$APP_PASSWORD" > .env
    printf 'Сохраните пароль для входа: %s\n' "$APP_PASSWORD"
-   unset APP_PASSWORD
+   unset APP_PASSWORD DOMAIN
    chmod 600 .env
    ```
 
-   Пароль также понадобится для входа на сайт. Имя пользователя — `kontragent`.
+   Сохраните пароль в менеджере паролей. Имя пользователя — `kontragent`. Все, кому вы передадите пароль, смогут читать общую историю и создавать отчёты.
 
-4. Соберите и запустите приложение:
-
-   ```sh
-   docker compose up -d --build
-   docker compose logs -f web
-   ```
-
-Контейнер использует AI-конфигурацию как раньше: если в `ai_config.json` AI включён, генератор отправит необходимые данные настроенному AI-провайдеру. Это может иметь отдельные условия, ограничения и стоимость. Сайт показывает это предупреждение перед формированием отчёта.
-
-## Приватный удалённый доступ через Tailscale
-
-1. Установите [Tailscale на VM](https://tailscale.com/kb/1031/install-linux) и выполните вход в тот же аккаунт/tailnet, который будет использоваться на ваших устройствах.
-2. Установите Tailscale на личные устройства и войдите в тот же tailnet. В настройках tailnet включите HTTPS certificates, если Tailscale предложит это для Serve.
-3. На VM запустите [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve):
+6. Соберите и запустите приложение вместе с публичным HTTPS-прокси:
 
    ```sh
-   sudo tailscale serve --bg 8000
-   sudo tailscale serve status
+   docker compose --profile public up -d --build
+   docker compose ps
+   docker compose logs -f web caddy
    ```
 
-4. Откройте выданный адрес `https://…ts.net` на устройстве с подключённым Tailscale. Введите имя `kontragent` и пароль из `.env`.
+   Когда DNS обновится и Caddy получит TLS-сертификат, откройте `https://dossier.example.com`. Браузер запросит имя `kontragent` и пароль из `.env`. Не вводите пароль на HTTP-странице. Если Caddy не получает сертификат, проверьте DNS и доступность портов 80/443.
 
-Не включайте Tailscale Funnel и не открывайте порт `8000` в интернет/правилах Oracle. Compose публикует приложение только на loopback, а Tailscale Serve проксирует его внутри tailnet. В правилах облачной сети оставьте только необходимый SSH-доступ и не добавляйте публичные правила HTTP/HTTPS.
+Обновление сайта: `git pull`, затем `docker compose --profile public up -d --build`. Отчёты и сертификаты сохраняются в Docker volumes. Резервно копируйте важные данные; `docker compose down -v` безвозвратно удалит отчёты и сохранённые сертификаты. Не открывайте порт `8000` в облачном firewall и не публикуйте `.env`, `rusprofile_cookies.json`, `ai_config.json` или Docker volume с отчётами.
 
-После перезапуска VM Docker Compose и Tailscale Serve должны восстановить доступ автоматически. Проверяйте состояние командами `docker compose ps` и `sudo tailscale serve status`.
+Если в `ai_config.json` AI включён, данные отчёта могут передаваться настроенному AI-провайдеру и обрабатываться по его условиям, ограничениям и тарифам. Сайт показывает предупреждение перед формированием отчёта.
+
+## Приватный доступ через Tailscale
+
+Если сайт должен быть доступен только вам, не включайте публичный профиль и не открывайте порты 80/443. Установите Tailscale на VM и устройства и войдите в один tailnet. Затем запустите [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve):
+
+```sh
+sudo tailscale serve --bg 8000
+sudo tailscale serve status
+```
+
+Откройте выданный адрес `https://…ts.net` на устройстве с подключённым Tailscale и введите имя `kontragent` и пароль из `.env`.
+
+Не включайте Tailscale Funnel. После перезапуска VM проверяйте состояние командой `docker compose ps` и `sudo tailscale serve status`.
 
 ## Важное о ключах и cookies
 

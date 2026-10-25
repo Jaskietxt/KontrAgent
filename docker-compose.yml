@@ -30,5 +30,25 @@ services:
       - no-new-privileges:true
     pids_limit: 128
 
+  caddy:
+    profiles:
+      - public
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - web
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   reports:
+  caddy_data:
+  caddy_config:
