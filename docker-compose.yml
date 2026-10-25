@@ -6,9 +6,11 @@ services:
       APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
       REPORT_TIMEOUT_SECONDS: "1800"
+      DATA_DIR: /data
       RUSPROFILE_COOKIES: /run/secrets/rusprofile_cookies.json
       AI_CONFIG: /run/secrets/ai_config.json
     volumes:
+      - reports:/data
       - type: bind
         source: ./rusprofile_cookies.json
         target: /run/secrets/rusprofile_cookies.json
@@ -27,3 +29,6 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 128
+
+volumes:
+  reports:

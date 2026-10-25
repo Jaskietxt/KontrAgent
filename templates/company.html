@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ c.raw_name or c.name or key }} — Контрагент{% endblock %}
+{% block content %}
+<nav class="crumb"><a href="{{ url_for('index') }}">← Все проверки</a></nav>
+<section class="head">
+  <div>
+    <p class="eyebrow">Досье организации</p>
+    <h1>{{ c.raw_name or c.name or key }}</h1>
+    <p class="ids">ИНН {{ c.inn or '—' }}{% if c.ogrn %} <span>·</span> ОГРН {{ c.ogrn }}{% endif %}{% if c.kpp %} <span>·</span> КПП {{ c.kpp }}{% endif %}</p>
+    <p class="ids">Проверено {{ created_at|dt }}</p>
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('report_pdf', key=key) }}">Скачать PDF <span aria-hidden="true">↓</span></a>
+    <form id="refresh-form" method="post" action="{{ url_for('refresh_company', key=key) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn" id="refresh" type="submit">Обновить данные</button>
+    </form>
+  </div>
+</section>
+<p id="rstage" class="progress-line" role="status" hidden>Обновляем досье. Это может занять несколько минут…</p>
+
+<section class="score {{ level }}">
+  <div class="risk-box">
+    <p class="gl">Сводная оценка генератора</p>
+    <p class="verdict {{ level }}"><span class="status-dot" aria-hidden="true"></span>{{ verdict }}</p>
+    <p class="small">Автоматический вывод по найденным факторам. Это не гарантия отсутствия риска; учитывайте полноту данных.</p>
+    <button class="link" type="button" id="how">Как читать оценку</button>
+  </div>
+  <div class="cov-box">
+    <p class="gl">Полнота проверки</p>
+    <p class="coverage-value"><b>{{ coverage }}</b><span>%</span></p>
+    <ul class="cells" aria-label="Блоки проверки с данными">
+      {% for b in blocks %}<li class="{{ 'on' if b.found else 'off' }}" title="{{ b.name }}: {{ 'данные получены' if b.found else 'данных нет' }}"></li>{% endfor %}
+    </ul>
+    <p class="small">Блоков с данными: {{ a.present_blocks }} из {{ a.data_blocks|length }}</p>
+  </div>
+</section>
+
+<nav class="tabs" role="tablist" aria-label="Разделы досье">
+  <button id="tab-sum-control" role="tab" aria-selected="true" aria-controls="tab-sum" tabindex="0" data-tab="sum">Сводка</button>
+  <button id="tab-doss-control" role="tab" aria-selected="false" aria-controls="tab-doss" tabindex="-1" data-tab="doss">Полное досье</button>
+  <button id="tab-src-control" role="tab" aria-selected="false" aria-controls="tab-src" tabindex="-1" data-tab="src">Источники и полнота</button>
+</nav>
+
+<section id="tab-sum" class="tabpane" role="tabpanel" aria-labelledby="tab-sum-control" tabindex="0">
+  {% if ai.executive_summary %}
+  <article class="card">
+    <h2>Резюме</h2>
+    <p class="body-copy">{{ ai.executive_summary }}</p>
+    <p class="small">Текст подготовлен ИИ по найденным фактам. Категорию риска и полноту рассчитывает генератор отдельно.</p>
+  </article>
+  {% elif c.description %}
+  <article class="card">
+    <h2>О компании</h2>
+    <p class="body-copy">{{ c.description }}</p>
+  </article>
+  {% endif %}
+
+  <div class="section-heading">
+    <div><p class="eyebrow">Автоматический анализ</p><h2>Факторы риска</h2></div>
+    <span class="small">{{ a.flags|length }} найдено</span>
+  </div>
+  {% if a.flags %}
+  <ul class="flags">
+    {% for f in a.flags %}
+    {% set note = ai_flags.get(f.num|string, {}) %}
+    <li class="{{ f.badge }}">
+      <div class="fh">
+        <span class="pill {{ f.badge }}">{{ {'critical':'Критический','high':'Высокий','medium':'Средний','low':'Умеренный'}[f.badge] }}</span>
+        <b>{{ f.title }}</b>
+      </div>
+      <p>{{ note.essence or f.essence }}</p>
+      <p class="rk">{{ note.risk or f.risk }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">По собранным данным факторы риска не выявлены. Это не гарантия: проверьте полноту сведений и первоисточники.</p>
+  {% endif %}
+
+  {% if ai.recommendations %}
+  <h2>Что проверить дальше</h2>
+  <ul class="recs">
+    {% for r in ai.recommendations %}
+    <li><b>{{ r.direction }}</b><p>{{ r.actions }}</p><p class="small">{{ r.criteria }}</p></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section id="tab-doss" class="tabpane" role="tabpanel" aria-labelledby="tab-doss-control" tabindex="0" hidden>
+  <iframe title="Полное PDF-досье в HTML-виде" sandbox src="{{ url_for('dossier_html', key=key) }}" loading="lazy"></iframe>
+</section>
+
+<section id="tab-src" class="tabpane" role="tabpanel" aria-labelledby="tab-src-control" tabindex="0" hidden>
+  <h2>Что удалось получить</h2>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th>Блок проверки</th><th>Статус</th></tr></thead>
+      <tbody>
+      {% for b in blocks %}
+      <tr><td>{{ b.name }}</td><td><span class="table-status {{ 'available' if b.found else 'missing' }}">{{ 'Получено' if b.found else 'Нет данных' }}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h2>Источник и время проверки</h2>
+  <div class="table-wrap">
+    <table class="tbl">
+      <thead><tr><th>Источник</th><th>Получено</th><th>Ограничения</th></tr></thead>
+      <tbody><tr>
+        <td>{% if c.link %}<a href="{{ c.link }}" target="_blank" rel="noopener noreferrer">rusprofile.ru ↗</a>{% else %}rusprofile.ru{% endif %}</td>
+        <td>{{ created_at|dt }}</td>
+        <td>Данные стороннего агрегатора могут быть неполными; сверяйте ключевые факты с первоисточниками.</td>
+      </tr></tbody>
+    </table>
+  </div>
+  <p class="small">Для юридически значимых решений сверяйте ключевые факты с ЕГРЮЛ, ФНС и картотекой арбитражных дел.</p>
+</section>
+
+<dialog id="dlg">
+  <h2>Как читать оценку</h2>
+  <p>Категория — это автоматический вывод на основе факторов, рассчитанных генератором по найденным сведениям. Она не является гарантией надёжности или рекомендацией заключать сделку.</p>
+  <p>Полнота показывает, в скольких из четырёх ключевых блоков нашлись данные: финансовая отчётность, налоги и взносы, численность и участники. Отсутствие сведений не трактуется как положительный сигнал.</p>
+  <form method="dialog"><button class="btn">Понятно</button></form>
+</dialog>
+{% endblock %}

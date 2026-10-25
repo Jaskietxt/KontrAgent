@@ -24,6 +24,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY dossier_report.py web_app.py ./
+COPY templates ./templates
+COPY static ./static
 
 EXPOSE 8000
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "1", "--timeout", "1900", "--access-logfile", "-", "--error-logfile", "-", "web_app:app"]

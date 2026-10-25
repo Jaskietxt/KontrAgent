@@ -4,7 +4,7 @@
 __pycache__
 *.py[cod]
 *.pdf
-*.html
 ai_config.json
 rusprofile_cookies.json
 rusprofile_acc.txt
+data

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="search">
+  <p class="eyebrow">Проверка контрагента</p>
+  <h1>Досье компании —<br>в одном отчёте</h1>
+  <p class="lead">Введите ИНН или ОГРН. Соберём сведения из открытых источников, покажем факторы риска и полноту проверки.</p>
+  <form id="f" class="searchbar" action="{{ url_for('index') }}" method="post" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input id="q" name="query" inputmode="numeric" maxlength="15"
+           pattern="(?:[0-9]{10}|[0-9]{12}|[0-9]{13}|[0-9]{15})"
+           placeholder="ИНН или ОГРН, например 7715635724"
+           value="{{ query }}" aria-label="ИНН или ОГРН" required>
+    <button id="go" type="submit">Проверить <span aria-hidden="true">→</span></button>
+  </form>
+  <p class="hint">ИНН — 10 или 12 цифр · ОГРН — 13 или 15 цифр</p>
+  <p class="small ai-note">Если в конфигурации включён AI, данные отчёта могут передаваться настроенному провайдеру и обрабатываться по его условиям.</p>
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  <div id="progress" class="progress" hidden role="status">
+    <div class="bar"><span id="barfill"></span></div>
+    <p id="stage">Подготавливаем проверку… Не закрывайте страницу.</p>
+  </div>
+</section>
+
+<section class="recent">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">История</p>
+      <h2>Последние проверки</h2>
+    </div>
+    <span class="small">Сохранено на этом сервере</span>
+  </div>
+  {% if recent %}
+  <ul class="list">
+    {% for r in recent %}
+    <li>
+      <a href="{{ url_for('company', key=r.key) }}">
+        <span class="n">{{ r.name }}</span>
+        <span class="m">ИНН {{ r.inn or '—' }} · {{ r.created_at|dt }}</span>
+      </a>
+      <span class="pill {{ r.level }}">{{ r.verdict }}</span>
+      <span class="cov">полнота {{ r.coverage }}%</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="empty">Проверок пока нет. Введите ИНН или ОГРН выше — первая появится здесь.</p>
+  {% endif %}
+</section>
+{% endblock %}
