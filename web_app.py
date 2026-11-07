@@ -173,9 +173,30 @@ def generate_report(query: str) -> None:
         except subprocess.TimeoutExpired as exc:
             raise ReportFailure("Формирование отчёта заняло слишком много времени.", 504) from exc
 
+        
         if result.returncode != 0:
-            app.logger.error("Report generator exited with status %s", result.returncode)
-            raise ReportFailure("Не удалось сформировать отчёт. Проверьте cookies, настройки и журналы сервера.")
+            app.logger.error(
+                "Report generator exited with status %s",
+                result.returncode
+            )
+
+            # Выводим только тип ошибки без полного traceback
+            stderr_lines = [
+                line.strip()
+                for line in result.stderr.splitlines()
+                if line.strip()
+            ]
+            if stderr_lines:
+                last_line = stderr_lines[-1]
+                error_type = last_line.split(":", 1)[0]
+                app.logger.error(
+                    "Generator error type: %s",
+                    error_type[:100]
+                )
+
+            raise ReportFailure(
+                "Не удалось сформировать отчёт. Проверьте журналы сервера."
+            )
         if not all(path.is_file() for path in (pdf_path, html_path, json_path)):
             app.logger.error("Report generator did not create all expected report files")
             raise ReportFailure("Генератор завершился без полного набора файлов досье.")
