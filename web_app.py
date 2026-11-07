@@ -187,10 +187,21 @@ def generate_report(query: str) -> None:
             ]
 
             if stderr_lines:
+                last_line = stderr_lines[-1]
+
+                # Не выводим полные пути, ключи и cookies в журнал
+                import re
+
+                safe_error = re.sub(
+                    r'(/[^\s"\']+)+',
+                    '[PATH]',
+                    last_line
+                )
+
                 app.logger.error(
-                    "Generator error type: %s",
-                    stderr_lines[-1].split(":", 1)[0][:100]
-            )
+                    "Generator error: %s",
+                    safe_error[:500]
+                )
 
             raise ReportFailure(
                 "Не удалось сформировать отчёт. "
