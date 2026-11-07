@@ -1,2 +1,14 @@
+[project]
+name = "kontragent"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "beautifulsoup4>=4.13,<5",
+    "Flask>=3.1,<4",
+    "gunicorn>=23,<24",
+    "requests>=2.32,<3",
+    "weasyprint>=66,<67"
+]
+
 [tool.vercel]
 entrypoint = "web_app:app"
