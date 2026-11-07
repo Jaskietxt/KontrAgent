@@ -16,10 +16,9 @@ from flask import Flask, Response, abort, redirect, render_template, request, se
 
 ROOT = Path(__file__).resolve().parent
 REPORT_SCRIPT = ROOT / "dossier_report.py"
-DATA_DIR = Path(os.environ.get("DATA_DIR", ROOT / "data"))
+DATA_DIR = Path(os.environ.get("DATA_DIR", "/tmp/kontragent" if os.environ.get("VERCEL") else str(ROOT / "data")))
 COOKIES_FILE = Path(os.environ.get("RUSPROFILE_COOKIES", ROOT / "rusprofile_cookies.json"))
 AI_CONFIG_FILE = Path(os.environ.get("AI_CONFIG", ROOT / "ai_config.json"))
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 REPORT_TIMEOUT_SECONDS = int(os.environ.get("REPORT_TIMEOUT_SECONDS", "1800"))
 QUERY_PATTERN = re.compile(r"(?:\d{10}|\d{12}|\d{13}|\d{15})")
 RISK_LABELS = {
@@ -43,14 +42,12 @@ class ReportFailure(Exception):
         self.status = status
 
 
-if len(APP_PASSWORD) < 32:
-    raise RuntimeError("APP_PASSWORD must contain at least 32 characters")
 if REPORT_TIMEOUT_SECONDS <= 0:
     raise RuntimeError("REPORT_TIMEOUT_SECONDS must be a positive integer")
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 app = Flask(__name__)
-app.secret_key = hmac.digest(APP_PASSWORD.encode("utf-8"), b"KontrAgent session signing", "sha256")
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
     MAX_CONTENT_LENGTH=4096,
     SESSION_COOKIE_HTTPONLY=True,
@@ -205,20 +202,6 @@ def generate_report(query: str) -> None:
 @app.template_filter("dt")
 def format_datetime(value: str) -> str:
     return _format_date(value)
-
-
-@app.before_request
-def require_basic_auth() -> Response | None:
-    auth = request.authorization
-    username_ok = hmac.compare_digest(auth.username if auth and auth.username else "", "kontragent")
-    password_ok = hmac.compare_digest(auth.password if auth and auth.password else "", APP_PASSWORD)
-    if not (auth and auth.type.lower() == "basic" and username_ok and password_ok):
-        return Response(
-            "Требуется авторизация.",
-            401,
-            {"WWW-Authenticate": 'Basic realm="KontrAgent", charset="UTF-8"'},
-        )
-    return None
 
 
 @app.after_request
