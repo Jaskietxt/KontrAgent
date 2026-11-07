@@ -382,23 +382,46 @@ class Rusprofile:
         time.sleep(self.delay + random.uniform(0, self.delay * 0.3))
 
     def get(self, url: str, params: dict | None = None) -> requests.Response:
+        """HTTP-запрос с диагностикой кода ответа без вывода cookies и URL."""
         last_exc = None
+        last_status = None
         for attempt in range(1, self.retries + 1):
             try:
                 r = self.session.get(url, params=params, timeout=self.timeout)
+                last_status = r.status_code
                 if r.status_code in (429, 403, 503):
-                    wait = self.delay * attempt * 3
-                    print(f"  ! HTTP {r.status_code}, sleeping {wait:.0f}s", file=sys.stderr)
-                    time.sleep(wait)
+                    print(
+                        f"  ! Rusprofile HTTP {r.status_code}; "
+                        f"attempt {attempt}/{self.retries}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    if attempt < self.retries:
+                        wait = self.delay * attempt * 3
+                        time.sleep(wait)
                     continue
                 r.encoding = r.apparent_encoding or "utf-8"
                 return r
             except requests.RequestException as exc:
                 last_exc = exc
-                time.sleep(self.delay * attempt)
-        if last_exc:
-            raise last_exc
-        raise RuntimeError(f"Failed to fetch {url}")
+                print(
+                    f"  ! Rusprofile network error: {type(exc).__name__}; "
+                    f"attempt {attempt}/{self.retries}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                if attempt < self.retries:
+                    time.sleep(self.delay * attempt)
+        if last_exc is not None:
+            raise RuntimeError(
+                f"Rusprofile network error after {self.retries} attempts: "
+                f"{type(last_exc).__name__}"
+            ) from last_exc
+        if last_status is not None:
+            raise RuntimeError(
+                f"Rusprofile HTTP {last_status} after {self.retries} attempts"
+            )
+        raise RuntimeError("Rusprofile request failed without a response")
 
     def search(self, query: str) -> list[dict]:
         query = re.sub(r"\s+", "", query)
